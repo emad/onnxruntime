@@ -67,7 +67,7 @@ SPECIALIZED_DROPOUT_GRAD_IMPL(half)
 
 constexpr int UNROLL = 4;
 
-template <typename T>
+template <typename T, bool has_residual>
 __global__ void BiasDropoutKernel(
     const int64_t N,
     const fast_divmod fdm_dim,
@@ -75,6 +75,7 @@ __global__ void BiasDropoutKernel(
     const std::pair<uint64_t, uint64_t> seeds,
     const T* X_data,
     const T* bias_data,
+    const T* residual_data,
     T* Y_data,
     bool* mask_data) {
   const float p = 1.0f - ratio;
@@ -104,7 +105,12 @@ __global__ void BiasDropoutKernel(
         T bias = bias_data[offset];
 
         mask_data[li] = (&rand.x)[i] < p;
-        Y_data[li] = (X_data[li] + bias) * T(mask_data[li]) * scale;
+        T output_data = (X_data[li] + bias) * T(mask_data[li]) * scale;
+        if (has_residual) {
+          output_data += residual_data[li];
+        }
+
+        Y_data[li] = output_data;
       }
     }
 
@@ -121,6 +127,7 @@ void BiasDropoutKernelImpl(
     PhiloxGenerator& generator,
     const T* X_data,
     const T* bias_data,
+    const T* residual_data,
     T* Y_data,
     bool* mask_data) {
   const int block_size = 256;
@@ -131,7 +138,11 @@ void BiasDropoutKernelImpl(
   const uint64_t counter_offset = static_cast<uint64_t>(((N - 1) / (block_size * grid_size * UNROLL) + 1) * UNROLL);
   auto seeds = generator.NextPhiloxSeeds(counter_offset);
 
-  BiasDropoutKernel<T><<<grid_size, block_size, 0>>>(N, fdm_dim, ratio, seeds, X_data, bias_data, Y_data, mask_data);
+  if (residual_data == nullptr) {
+    BiasDropoutKernel<T, false><<<grid_size, block_size, 0>>>(N, fdm_dim, ratio, seeds, X_data, bias_data, residual_data, Y_data, mask_data);
+  } else {
+    BiasDropoutKernel<T, true><<<grid_size, block_size, 0>>>(N, fdm_dim, ratio, seeds, X_data, bias_data, residual_data, Y_data, mask_data);
+  }
 }
 
 #define SPECIALIZED_BIAS_DROPOUT_IMPL(T) \
@@ -143,6 +154,7 @@ void BiasDropoutKernelImpl(
       PhiloxGenerator& generator,   \
       const T* X_data,              \
       const T* bias_data,           \
+      const T* residual_data,       \
       T* Y_data,                    \
       bool* mask_data);
 

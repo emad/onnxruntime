@@ -48,12 +48,15 @@ Status BiasDropoutFusion::ApplyImpl(Graph& graph, bool& modified, int graph_leve
       continue;
     }
 
+    NodeArg& dummy = graph.GetOrCreateNodeArg("", nullptr);
     if (input1_shape->dim_size() == 1) {     
       dropout_input.push_back(node.MutableInputDefs()[1]);  // droput input
       dropout_input.push_back(node.MutableInputDefs()[0]);  // bias
+      dropout_input.push_back(&dummy);                      // residual
     } else if (input2_shape->dim_size() == 1) {  
       dropout_input.push_back(node.MutableInputDefs()[0]);  // dropout input
       dropout_input.push_back(node.MutableInputDefs()[1]);  // bias
+      dropout_input.push_back(&dummy);                      // residual
     } else {
       continue;
     }

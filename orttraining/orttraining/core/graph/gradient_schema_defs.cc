@@ -1000,14 +1000,15 @@ Example 4:
       .AllowUncheckedAttributes()
       .Input(0, "data", "The input data as Tensor.", "T")
       .Input(1, "bias", "The bias input", "T")
-      .Input(2, "ratio",
+      .Input(2, "residual", "The residual input", "T", OpSchema::Optional)
+      .Input(3, "ratio",
              "The ratio of random dropout, with value in [0, 1). If this input was not set, "
              "or if it was set to 0, the output would be a simple copy of the input. "
              "If it's non-zero, output will be a random dropout of input, which is typically "
              "the case during training.",
              "T1",
              OpSchema::Optional)
-      .Input(3, "training_mode", 
+      .Input(4, "training_mode", 
              "If set to true then it indicates dropout is being used for "
              "training. It is an optional value hence unless specified explicitly, it is false. "
              "If it is false, ratio is ignored and the operation mimics inference mode where nothing "

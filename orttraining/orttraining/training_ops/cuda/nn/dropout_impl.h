@@ -25,6 +25,7 @@ void BiasDropoutKernelImpl(
   PhiloxGenerator& generator,
   const T* X_data,
   const T* bias_data,
+  const T* residual_data,
   T* Y_data,
   bool* mask_data);
 

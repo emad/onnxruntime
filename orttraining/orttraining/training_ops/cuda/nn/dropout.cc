@@ -147,6 +147,16 @@ Status BiasDropout<T1, T2>::ComputeInternal(OpKernelContext* context) const {
   }
   auto bias_data = reinterpret_cast<const CudaT*>(bias->template Data<T1>());
 
+  //Get residual_data
+  const Tensor* residual = context->Input<Tensor>(2);
+  const CudaT* residual_data = nullptr;
+  if (residual != nullptr) {
+    const TensorShape& residual_shape = residual->Shape();
+    if (residual_shape != x_shape) {
+      return Status(common::ONNXRUNTIME, common::FAIL, "Residual input shape does not match X input shape.");
+    }
+    residual_data = reinterpret_cast<const CudaT*>(residual->template Data<T1>());
+  }
 
   //Get Y_data
   auto Y = context->Output(0, x_shape);
@@ -158,7 +168,7 @@ Status BiasDropout<T1, T2>::ComputeInternal(OpKernelContext* context) const {
 
   //Get the ratio_data
   float ratio_data;
-  auto ratio = context->Input<Tensor>(2);
+  auto ratio = context->Input<Tensor>(3);
 
   static_assert(std::is_same<T2, MLFloat16>::value || std::is_same<T2, float>::value || std::is_same<T2, double>::value,
                 "T2 must be float16 or float or double");
@@ -170,7 +180,7 @@ Status BiasDropout<T1, T2>::ComputeInternal(OpKernelContext* context) const {
   }
   ORT_ENFORCE(ratio_data >= 0.0f && ratio_data < 1.0f);
 
-  const Tensor* training_mode = context->Input<Tensor>(3);
+  const Tensor* training_mode = context->Input<Tensor>(4);
   //Check for inference mode.
   if ((0 == ratio_data /*Backward compat with TrainableDropout*/) ||
       (training_mode == nullptr || *(training_mode->Data<bool>()) == false)) {
@@ -195,7 +205,7 @@ Status BiasDropout<T1, T2>::ComputeInternal(OpKernelContext* context) const {
 
   const fast_divmod fdm_dim(gsl::narrow_cast<int>(dim));
   PhiloxGenerator& generator = generator_ != nullptr ? *generator_.get() : PhiloxGenerator::Default();
-  BiasDropoutKernelImpl(GetDeviceProp(), N, fdm_dim, ratio_data, generator, X_data, bias_data, Y_data, mask_data);
+  BiasDropoutKernelImpl(GetDeviceProp(), N, fdm_dim, ratio_data, generator, X_data, bias_data, residual_data, Y_data, mask_data);
 
   return Status::OK();
 }
