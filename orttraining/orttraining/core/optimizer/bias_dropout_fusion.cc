@@ -23,13 +23,16 @@ Status BiasDropoutFusion::ApplyImpl(Graph& graph, bool& modified, int graph_leve
 
     ORT_RETURN_IF_ERROR(Recurse(node, modified, graph_level, logger));
 
+    std::vector<std::reference_wrapper<Node>> nodes_to_fuse;
+
+    // matching for bias Add node
     if (!graph_utils::IsSupportedOptypeVersionAndDomain(node, "Add", {7}) ||
         !graph_utils::IsSupportedProvider(node, GetCompatibleExecutionProviders()) ||
         node.GetOutputEdgesCount() != 1) {
       continue;
     }
 
-    std::vector<NodeArg*> dropout_input;
+    std::vector<NodeArg*> dropout_input, dropout_output;
     const TensorShapeProto* input1_shape = node.MutableInputDefs()[0]->Shape();
     const TensorShapeProto* input2_shape = node.MutableInputDefs()[1]->Shape();
 
@@ -47,20 +50,20 @@ Status BiasDropoutFusion::ApplyImpl(Graph& graph, bool& modified, int graph_leve
         input1_shape->dim(last_dim_shape1).dim_value() != input2_shape->dim(last_dim_shape2).dim_value()) {
       continue;
     }
-
-    NodeArg& dummy = graph.GetOrCreateNodeArg("", nullptr);
+    
     if (input1_shape->dim_size() == 1) {     
       dropout_input.push_back(node.MutableInputDefs()[1]);  // droput input
       dropout_input.push_back(node.MutableInputDefs()[0]);  // bias
-      dropout_input.push_back(&dummy);                      // residual
     } else if (input2_shape->dim_size() == 1) {  
       dropout_input.push_back(node.MutableInputDefs()[0]);  // dropout input
       dropout_input.push_back(node.MutableInputDefs()[1]);  // bias
-      dropout_input.push_back(&dummy);                      // residual
     } else {
       continue;
     }
+    Node& add_node = node;
+    nodes_to_fuse.push_back(add_node);
 
+    // matching for Dropout node
     auto next_node_itr = node.OutputNodesBegin();
     if (next_node_itr == node.OutputNodesEnd()) {
       continue;
@@ -77,9 +80,45 @@ Status BiasDropoutFusion::ApplyImpl(Graph& graph, bool& modified, int graph_leve
       continue;
     }
 
-    Node& add_node = node;
     Node& dropout_node = const_cast<Node&>(next_node);
-    bool is_onnx_dropout = next_node.OpType().compare("Dropout") == 0;
+    nodes_to_fuse.push_back(dropout_node);
+
+    dropout_output.push_back(dropout_node.MutableOutputDefs()[0]);
+    dropout_output.push_back(dropout_node.MutableOutputDefs()[1]);    
+    
+    bool is_onnx_dropout = dropout_node.OpType().compare("Dropout") == 0;
+
+    // matching for residual Add node
+    bool has_residual_add = false;
+    for (auto last_node_itr = dropout_node.OutputNodesBegin(); last_node_itr != dropout_node.OutputNodesEnd(); ++last_node_itr) {
+      const Node& last_node = (*last_node_itr);
+
+      if (graph_utils::IsSupportedOptypeVersionAndDomain(last_node, "Add", {7}) &&
+          last_node.GetExecutionProviderType() == node.GetExecutionProviderType()) {
+
+        // dropout's output is not part of of graph output
+        if (graph.GetNodeOutputsInGraphOutputs(dropout_node).empty()) {
+          Node& residual_add_node = const_cast<Node&>(last_node);
+          const std::string& dropout_output_name = dropout_node.OutputDefs()[0]->Name();
+          if (dropout_output_name == residual_add_node.InputDefs()[0]->Name()) {
+            dropout_input.push_back(residual_add_node.MutableInputDefs()[1]);    // residual
+          } else if (dropout_output_name == residual_add_node.InputDefs()[1]->Name()) {
+            dropout_input.push_back(residual_add_node.MutableInputDefs()[0]);    // residual
+          }
+          
+          dropout_output[0] = residual_add_node.MutableOutputDefs()[0];
+
+          nodes_to_fuse.push_back(residual_add_node);
+          has_residual_add = true;
+          break;
+        }
+      }
+    }
+    
+    if (!has_residual_add) {
+      NodeArg& dummy = graph.GetOrCreateNodeArg("", nullptr);
+      dropout_input.push_back(&dummy);    // add a dummy residual
+    }    
 
     if (dropout_node.InputDefs().size() > 1) {
       dropout_input.push_back(dropout_node.MutableInputDefs()[1]);  // ratio
@@ -93,7 +132,7 @@ Status BiasDropoutFusion::ApplyImpl(Graph& graph, bool& modified, int graph_leve
                                                   op_type,
                                                   "fused Add and Dropout",
                                                   dropout_input,
-                                                  {},
+                                                  dropout_output,
                                                   {},
                                                   kMSDomain);
 
@@ -107,10 +146,9 @@ Status BiasDropoutFusion::ApplyImpl(Graph& graph, bool& modified, int graph_leve
     // Assign provider to this new node. Provider should be same as the provider for old node.
     dropout_add_fusion_node.SetExecutionProviderType(dropout_node.GetExecutionProviderType());
 
-    // move output definitions and edges from dropout_node to dropout_add_fusion_node
-    // delete add_node and dropout_node.
-    graph_utils::FinalizeNodeFusion(graph, {add_node, dropout_node}, dropout_add_fusion_node);
-   
+    // delete bias_add_node, dropout_node and optionally residual_add_node
+    graph_utils::FinalizeNodeFusion(graph, nodes_to_fuse, dropout_add_fusion_node, false, false);
+
     modified = true;
   }
 

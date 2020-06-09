@@ -999,8 +999,8 @@ Example 4:
       .Attr("seed", "(Optional) Seed to the random generator, if not specified we will auto generate one.", AttributeProto::INT, OPTIONAL_VALUE)
       .AllowUncheckedAttributes()
       .Input(0, "data", "The input data as Tensor.", "T")
-      .Input(1, "bias", "The bias input", "T")
-      .Input(2, "residual", "The residual input", "T", OpSchema::Optional)
+      .Input(1, "bias", "The bias input, a vector with the same shape as last dim of data", "T")
+      .Input(2, "residual", "The residual input, must have the same shape as data", "T", OpSchema::Optional)
       .Input(3, "ratio",
              "The ratio of random dropout, with value in [0, 1). If this input was not set, "
              "or if it was set to 0, the output would be a simple copy of the input. "
@@ -1017,7 +1017,7 @@ Example 4:
              "T2",
              OpSchema::Optional)
       .Output(0, "output", "The output.", "T")
-      .Output(1, "mask", "The output mask.", "T2", OpSchema::Optional)
+      .Output(1, "mask", "The output mask of dropout.", "T2", OpSchema::Optional)
       .TypeConstraint(
           "T",
           {"tensor(float16)", "tensor(float)", "tensor(double)"},

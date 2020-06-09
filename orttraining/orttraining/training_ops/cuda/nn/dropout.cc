@@ -114,8 +114,8 @@ Status DropoutGrad<T1, T2>::ComputeInternal(OpKernelContext* context) const {
           .TypeConstraint("T", DataTypeImpl::GetTensorType<T1>())    \
           .TypeConstraint("T1", DataTypeImpl::GetTensorType<T2>())   \
           .TypeConstraint("T2", DataTypeImpl::GetTensorType<bool>()) \
-          .InputMemoryType<OrtMemTypeCPUInput>(2)                    \
-          .InputMemoryType<OrtMemTypeCPUInput>(3),                    \
+          .InputMemoryType<OrtMemTypeCPUInput>(3)                    \
+          .InputMemoryType<OrtMemTypeCPUInput>(4),                   \
       BiasDropout<T1, T2>);
 
 REGISTER_BIAS_DROPOUT_KERNEL_TYPED(MLFloat16, MLFloat16)
@@ -209,8 +209,6 @@ Status BiasDropout<T1, T2>::ComputeInternal(OpKernelContext* context) const {
 
   return Status::OK();
 }
-
-
 
 }  // namespace cuda
 }  // namespace onnxruntime
