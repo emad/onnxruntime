@@ -201,7 +201,7 @@ size_t BFCArena::RoundedBytes(size_t bytes) {
 }
 
 void* BFCArena::Alloc(size_t size) {
-  return AllocateRawInternal(size, false);
+  return AllocateRawInternal(size, true);
 }
 
 void* BFCArena::Reserve(size_t size) {
