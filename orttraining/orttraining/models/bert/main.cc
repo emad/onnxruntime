@@ -30,6 +30,7 @@ using namespace onnxruntime::training::tensorboard;
 using namespace std;
 
 struct BertParameters : public TrainingRunner::Parameters {
+  int device_id = -1;
   int max_sequence_length = 512;
   int max_predictions_per_sequence = 80;
   size_t batch_size_phase2;
@@ -79,6 +80,7 @@ Status ParseArguments(int argc, char* argv[], BertParameters& params, OrtParamet
         cxxopts::value<std::string>()->default_value(""))
       ("convergence_test_output_file", "The convergence test output file path.",
         cxxopts::value<std::string>()->default_value(""))
+      ("device_id", "GPU device id.", cxxopts::value<int>()->default_value("-1"))
       ("train_batch_size", "Total batch size for training.", cxxopts::value<int>())
       ("train_batch_size_phase2", "Total batch size for training.", cxxopts::value<int>()->default_value("1"))
       ("eval_batch_size", "Total batch size for eval.", cxxopts::value<int>())
@@ -202,6 +204,8 @@ Status ParseArguments(int argc, char* argv[], BertParameters& params, OrtParamet
 
     params.num_train_steps = flags["num_train_steps"].as<int>();
     params.num_train_steps_phase2 = flags["num_train_steps_phase2"].as<int>();
+
+    params.device_id = flags["device_id"].as<int>();
 
     params.batch_size = flags["train_batch_size"].as<int>();
     if (flags.count("eval_batch_size")) {
@@ -532,7 +536,10 @@ void setup_training_params(BertParameters& params) {
 #endif
 
 #ifdef USE_CUDA
-  OrtDevice::DeviceId device_id = static_cast<OrtDevice::DeviceId>(params.mpi_context.local_rank);
+  OrtDevice::DeviceId device_id = params.device_id < 0? 
+    static_cast<OrtDevice::DeviceId>(params.mpi_context.local_rank) : 
+    static_cast<OrtDevice::DeviceId>(params.device_id);
+  std::cout << "Using device " << static_cast<int>(device_id) << std::endl;
   size_t cuda_mem_limit = std::numeric_limits<size_t>::max();
   if (params.cuda_mem_limit_in_gb > 0)
     cuda_mem_limit = static_cast<size_t>(params.cuda_mem_limit_in_gb * 1024 * 1024 * 1024);

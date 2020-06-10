@@ -291,6 +291,8 @@ ZeROOptimizerGraphBuilder::ZeROOptimizerGraphBuilder(
     : OptimizerGraphBuilder(opt_builder_registry,
                             opt_graph_config,
                             weight_names_to_opt_configs) {
+  std::cout << "opt_graph_config.data_parallel_group_size = " << opt_graph_config.data_parallel_group_size << std::endl;
+  std::cout << "IsNcclAvailable() = " << IsNcclAvailable() << std::endl;
   ORT_ENFORCE(opt_graph_config.data_parallel_group_size > 1, "ZeRO optimizer graph builder can only be used for distributed training.");
   ORT_ENFORCE(opt_graph_config.use_nccl, "Distributed training with ZeRO is only supported with NCCL.");
   ORT_ENFORCE(IsNcclAvailable(), "Distributed training with NCCL is not supported, as NCCL is not enabled in this build.");
@@ -306,6 +308,8 @@ Status ZeROOptimizerGraphBuilder::BuildInternal(
   auto nodearg_name_generator = [&graph](const std::string& base_name) {
     return graph.GenerateNodeArgName(base_name);
   };
+
+  std::cout << "Building using ZeRo optimizer graph builder\n";
 
   // handle optimizer partitioning
   ORT_RETURN_IF_ERROR(ModifyParametersForOptimizerPartitioning(
