@@ -95,16 +95,36 @@ Status Transpose::DoTranspose(const Transpose& kernel,
   TensorPitches original_input_strides(input_dims);
   TensorPitches original_output_strides(output_dims);
 
+  TArray<int64_t> input_shape(input_dims);
+  TArray<int64_t> tmp_input_strides(original_input_strides);
+
+  TArray<int64_t> tmp_output_strides(rank);
+  for (auto i = 0; i < rank; i++) {
+    tmp_output_strides[i] = original_output_strides[permutations[i]];
+  }
+
+  size_t element_size = input.DataType()->Size();
+  if (rank == 4 && permutations[1] == 2 && permutations[2] == 1) {
+    int64_t num_elements = input_shape[2]*input_shape[3];
+    if (num_elements <= 1024 && (num_elements & 0x1f) == 0) {
+      //std::cout << input_shape[0] << " " << input_shape[1] << " " << input_shape[2] << " " << input_shape[3] << std::endl;
+      //std::cout << tmp_input_strides[0] << " " << tmp_input_strides[1] << " " << tmp_input_strides[2] << " " << tmp_input_strides[3] << std::endl;
+      //std::cout << tmp_output_strides[0] << " " << tmp_output_strides[1] << " " << tmp_output_strides[2] << " " << tmp_output_strides[3] << std::endl;
+      return Transpose4DImpl(element_size, input_shape, tmp_input_strides, input.DataRaw(),
+                             tmp_output_strides, output.MutableDataRaw(), output.Shape().Size());
+    }
+  }
+
   TArray<int64_t> input_strides(rank);
   for (auto i = 0; i < rank; i++) {
     input_strides[i] = original_input_strides[permutations[i]];
   }
+
   TArray<fast_divmod> output_strides(rank);
   for (auto i = 0; i < rank; i++) {
     output_strides[i] = fast_divmod(gsl::narrow_cast<int>(original_output_strides[i]));
   }
 
-  size_t element_size = input.DataType()->Size();
   auto status = TransposeImpl(element_size, rank, input_strides, input.DataRaw(),
                               output_strides, output.MutableDataRaw(), output.Shape().Size());
 
