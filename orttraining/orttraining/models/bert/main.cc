@@ -30,7 +30,7 @@ using namespace onnxruntime::training::tensorboard;
 using namespace std;
 
 struct BertParameters : public TrainingRunner::Parameters {
-  int device_id = -1;
+  int device_offset = 0;
   int max_sequence_length = 512;
   int max_predictions_per_sequence = 80;
   size_t batch_size_phase2;
@@ -80,7 +80,7 @@ Status ParseArguments(int argc, char* argv[], BertParameters& params, OrtParamet
         cxxopts::value<std::string>()->default_value(""))
       ("convergence_test_output_file", "The convergence test output file path.",
         cxxopts::value<std::string>()->default_value(""))
-      ("device_id", "GPU device id.", cxxopts::value<int>()->default_value("-1"))
+      ("device_offset", "GPU start device id.", cxxopts::value<int>()->default_value("0"))
       ("train_batch_size", "Total batch size for training.", cxxopts::value<int>())
       ("train_batch_size_phase2", "Total batch size for training.", cxxopts::value<int>()->default_value("1"))
       ("eval_batch_size", "Total batch size for eval.", cxxopts::value<int>())
@@ -205,7 +205,7 @@ Status ParseArguments(int argc, char* argv[], BertParameters& params, OrtParamet
     params.num_train_steps = flags["num_train_steps"].as<int>();
     params.num_train_steps_phase2 = flags["num_train_steps_phase2"].as<int>();
 
-    params.device_id = flags["device_id"].as<int>();
+    params.device_offset = flags["device_offset"].as<int>();
 
     params.batch_size = flags["train_batch_size"].as<int>();
     if (flags.count("eval_batch_size")) {
@@ -327,7 +327,9 @@ Status ParseArguments(int argc, char* argv[], BertParameters& params, OrtParamet
       return Status(ONNXRUNTIME, INVALID_ARGUMENT, "Incorrect optimizer type: it must be one of [Adam|Lamb]");
     }
 
+    std::cout << "flags[partition_optimizer].as<bool>() = " << flags["partition_optimizer"].as<bool>() << std::endl;
     params.partition_optimizer = flags["partition_optimizer"].as<bool>();
+    std::cout << "params.partition_optimizer = " << params.partition_optimizer << std::endl;
     params.enable_grad_norm_clip = flags["enable_grad_norm_clip"].as<bool>();
     float alpha = flags["alpha"].as<float>();
     float beta = flags["beta"].as<float>();
@@ -536,9 +538,8 @@ void setup_training_params(BertParameters& params) {
 #endif
 
 #ifdef USE_CUDA
-  OrtDevice::DeviceId device_id = params.device_id < 0? 
-    static_cast<OrtDevice::DeviceId>(params.mpi_context.local_rank) : 
-    static_cast<OrtDevice::DeviceId>(params.device_id);
+  OrtDevice::DeviceId device_id =
+    static_cast<OrtDevice::DeviceId>(params.mpi_context.local_rank + params.device_offset);
   std::cout << "Using device " << static_cast<int>(device_id) << std::endl;
   size_t cuda_mem_limit = std::numeric_limits<size_t>::max();
   if (params.cuda_mem_limit_in_gb > 0)
@@ -718,6 +719,7 @@ static Status RunPerformanceTest(const BertParameters& params, const Environment
 static Status RunTraining(const BertParameters& params, const Environment& env) {
   const size_t max_num_files_preload = 2;
 
+  std::cout << "RunTraining(): partition_optimizer = " << params.partition_optimizer << std::endl;
   auto runner = onnxruntime::make_unique<TrainingRunner>(params, env);
   ORT_RETURN_IF_ERROR(runner->Initialize());
 

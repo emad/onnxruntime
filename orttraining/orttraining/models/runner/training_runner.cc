@@ -165,6 +165,7 @@ Status TrainingRunner::Initialize() {
 
   TrainingSession::TrainingConfigurationResult config_result{};
 
+  std::cout << "Using partition optimizer: " <<  config.optimizer_config.value().partition_optimizer << std::endl;
   ORT_RETURN_IF_ERROR(session_.ConfigureForTraining(config, config_result));
 
   if (config_result.mixed_precision_config_result.has_value()) {
