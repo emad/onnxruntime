@@ -180,21 +180,20 @@ Status BiasDropout<T1, T2>::ComputeInternal(OpKernelContext* context) const {
   }
   ORT_ENFORCE(ratio_data >= 0.0f && ratio_data < 1.0f);
 
-  const Tensor* training_mode = context->Input<Tensor>(4);
-  //Check for inference mode.
-  if ((0 == ratio_data /*Backward compat with TrainableDropout*/) ||
-      (training_mode == nullptr || *(training_mode->Data<bool>()) == false)) {
-    if (Y_data != X_data) {
-      CUDA_CALL_THROW(cudaMemcpyAsync(Y_data, X_data, N * sizeof(T1), cudaMemcpyDeviceToDevice));
-    }
+  // const Tensor* training_mode = context->Input<Tensor>(4);
+  // //Check for inference mode.
+  // if (training_mode == nullptr || *(training_mode->Data<bool>()) == false) {
+  //   if (Y_data != X_data) {
+  //     CUDA_CALL_THROW(cudaMemcpyAsync(Y_data, X_data, N * sizeof(T1), cudaMemcpyDeviceToDevice));
+  //   }
 
-    // If mask is requested, return all 1s.
-    if (mask != nullptr) {
-      ORT_ENFORCE(cudaMemset(mask->MutableData<bool>(), true, N * sizeof(bool)) == cudaSuccess);
-    }
+  //   // If mask is requested, return all 1s.
+  //   if (mask != nullptr) {
+  //     ORT_ENFORCE(cudaMemset(mask->MutableData<bool>(), true, N * sizeof(bool)) == cudaSuccess);
+  //   }
 
-    return Status::OK();
-  }
+  //   return Status::OK();
+  // }
 
   IAllocatorUniquePtr<bool> temp_mask_buffer{};  // buffer to use if mask is not provided
   bool* const mask_data = [this, N, mask, &temp_mask_buffer]() {

@@ -10,7 +10,7 @@ namespace onnxruntime {
 /**
 @Class BiasDropoutFusion
 
-Fuse Add + Gelu to GeluFusion
+Fuse Add + Dropout + optional Add to BiasDropoutFusion
 
 */
 class BiasDropoutFusion : public GraphTransformer {
