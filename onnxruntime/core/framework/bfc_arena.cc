@@ -369,6 +369,7 @@ void BFCArena::SplitChunk(BFCArena::ChunkHandle h, size_t num_bytes) {
 }
 
 void BFCArena::Free(void* p) {
+  // std::cout << "arenaFree(" << p << ")\n" << std::flush;
   if (p == nullptr) {
     return;
   }

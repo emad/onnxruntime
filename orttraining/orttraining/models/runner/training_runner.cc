@@ -329,6 +329,8 @@ Status TrainingRunner::Run(IDataLoader* training_data_loader, IDataLoader* test_
     session_.Save(params_.model_actual_running_graph_path, TrainingSession::SaveOption::NO_RELOAD);
   }
 
+  session_.Save("training_graph.onnx", TrainingSession::SaveOption::NO_RELOAD);
+
   // maybe in the future we can support an evaluation-only run
   if (!training_data_loader) {
     LOGS_DEFAULT(WARNING) << "training data loader not provided, nothing to do";
@@ -629,11 +631,16 @@ Status TrainingRunner::RunWithUpdate(VectorString& feed_names,
   // Sync launch of session. This model-update session runs on the main thread, so
   // no new async session will be launched until this model-update session is done.
   // This prevents the new sessions from using not-updated model.
-  ORT_RETURN_IF_ERROR(session_.Run(RunOptions(),
+  // std::cout << "session_.Run invoke\n" << std::flush;
+  auto st = session_.Run(RunOptions(),
                                    feed_names,
                                    feeds,
                                    fetch_names,
-                                   &fetches));
+                                   &fetches);
+  std::cout << "status " << st << std::endl << std::flush;
+  ORT_THROW_IF_ERROR(st);
+
+  // std::cout << "UpdateLossScale invoke\n" << std::flush;
 
   if (loss_scaler_) {
     auto it = std::find(fetch_names.begin(), fetch_names.end(), opt_graph_outputs_[OptimizerOutputKey::GradientAllIsFinite]);
@@ -647,6 +654,8 @@ Status TrainingRunner::RunWithUpdate(VectorString& feed_names,
 
   // Assume that only the last pipeline stage can see loss, predicted value, and so on.
   // Thus, the error function should only be called when we are at the last stage.
+  // std::cout << "post evaluation invoke\n" << std::flush;
+
   const bool session_can_see_loss = params_.pipeline_parallel_size == 1 ||
     pipeline_context_.pipeline_stage_id == params_.pipeline_parallel_size - 1;
   if (session_can_see_loss &&
@@ -662,9 +671,11 @@ Status TrainingRunner::RunWithUpdate(VectorString& feed_names,
 
   // Wait all workers to finish this around of pipeline parallism.
   // The last batch in a pipeline collects gradient and update the model.
+  // std::cout << "pipeline join\n" << std::flush;
   pipeline_worker_pool_.JoinAll();
 
   // Add one after process one batch.
+  // std::cout << "update step\n" << std::flush;
   ++step_;
   // Add one after update the model once.
   ++weight_update_step_count_;
@@ -781,6 +792,7 @@ Status TrainingRunner::TrainingLoop(IDataLoader& training_data_loader, IDataLoad
         auto start = std::chrono::high_resolution_clock::now();
 
         if (is_weight_update_step) {
+          // std::cout << "PrepareFeedNamesAndFeeds(ModelUpdateStep)\n" << std::flush;
           PrepareFeedNamesAndFeeds(ModelUpdateStep,
                                   training_data_loader,
                                   *training_data,
@@ -788,9 +800,11 @@ Status TrainingRunner::TrainingLoop(IDataLoader& training_data_loader, IDataLoad
                                   batch,
                                   feed_names,
                                   feeds);
+          // std::cout << "PrepareFetchNamesAndFetches(ModelUpdateStep)\n" << std::flush;
           PrepareFetchNamesAndFetches(ModelUpdateStep,
                                       fetch_names,
                                       fetches);
+          // std::cout << "RunWithUpdate\n" << std::flush;
           RunWithUpdate(feed_names, fetch_names, feeds, fetches);
         } else {
           PrepareFeedNamesAndFeeds(GradientAccumulateStep,

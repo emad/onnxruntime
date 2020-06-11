@@ -8,6 +8,7 @@
 #include <string>
 #include <cstring>
 #include <type_traits>
+#include <iostream>
 
 #include "core/common/common.h"
 #include "core/common/exceptions.h"

@@ -22,6 +22,7 @@ namespace onnxruntime {
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_CUDA(OrtDevice::DeviceId device_id,
                                                                                size_t cuda_mem_limit = std::numeric_limits<size_t>::max(),
                                                                                onnxruntime::ArenaExtendStrategy arena_extend_strategy = ArenaExtendStrategy::kNextPowerOfTwo);
+                                                                               // onnxruntime::ArenaExtendStrategy arena_extend_strategy = ArenaExtendStrategy::kSameAsRequested);
 }
 
 using namespace onnxruntime;
@@ -39,6 +40,7 @@ struct BertParameters : public TrainingRunner::Parameters {
   size_t num_train_steps_phase2;
   float warmup_ratio_phase2;
   float cuda_mem_limit_in_gb = -1;
+  onnxruntime::ArenaExtendStrategy arena_extend_strategy = ArenaExtendStrategy::kNextPowerOfTwo;
 
   PathString train_data_dir_phase2;
   PathString test_data_dir_phase2;
@@ -152,6 +154,7 @@ Status ParseArguments(int argc, char* argv[], BertParameters& params, OrtParamet
         cxxopts::value<int64_t>()->default_value("0"))
       ("ratio_min", "Lamb min ratio parameter", cxxopts::value<float>()->default_value("0.05"))
       ("ratio_max", "Lamb max ratio parameter", cxxopts::value<float>()->default_value("5.0"))
+      ("arena_extend_strategy", "Memory arena extend strategy", cxxopts::value<std::string>()->default_value("power_of_two"))
       ("cuda_mem_limit_in_gb", "Max cuda memory ort can use, in GB", cxxopts::value<float>()->default_value("-1.0"))
       ("data_parallel_size", "Data parallel group size.", cxxopts::value<int>()->default_value("1"))
       ("horizontal_parallel_size", "Horizontal model parallel group size.", cxxopts::value<int>()->default_value("1"))
@@ -195,6 +198,15 @@ Status ParseArguments(int argc, char* argv[], BertParameters& params, OrtParamet
     params.lr_params.warmup_ratio = ratio;
 
     params.cuda_mem_limit_in_gb = flags["cuda_mem_limit_in_gb"].as<float>();
+    if (flags["arena_extend_strategy"].as<std::string>().compare("same_as_requested") == 0) {
+      params.arena_extend_strategy = ArenaExtendStrategy::kSameAsRequested;
+      std::cout << "Using same as requested arena strategy\n";
+    }
+    else {
+      params.arena_extend_strategy = ArenaExtendStrategy::kNextPowerOfTwo;
+      std::cout << "Using next power of two arena strategy\n";
+    }
+
 
     float ratio_phase2 = flags["warmup_ratio_phase2"].as<float>();
     if (ratio_phase2 > 1.f || ratio_phase2 < 0.f) {
@@ -544,7 +556,7 @@ void setup_training_params(BertParameters& params) {
   size_t cuda_mem_limit = std::numeric_limits<size_t>::max();
   if (params.cuda_mem_limit_in_gb > 0)
     cuda_mem_limit = static_cast<size_t>(params.cuda_mem_limit_in_gb * 1024 * 1024 * 1024);
-  params.providers.emplace(kCudaExecutionProvider, CreateExecutionProviderFactory_CUDA(device_id, cuda_mem_limit));
+  params.providers.emplace(kCudaExecutionProvider, CreateExecutionProviderFactory_CUDA(device_id, cuda_mem_limit, params.arena_extend_strategy));
   params.input_allocator = std::make_shared<CUDAPinnedAllocator>(device_id, CUDA_PINNED);
 #endif
 

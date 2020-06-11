@@ -146,7 +146,7 @@ Status NcclReduceScatter::ComputeInternal(OpKernelContext* context) const {
   const int64_t alignment = size * 32;
   const int64_t padded_count = total_count + alignment - (total_count % alignment);
   const int64_t padded_size = padded_count * element_size;
-  std::cout << "within NcclReduceScatter allocating buffer of size " << padded_size/1024./1024.<< " MiB\n";
+  std::cout << "within NcclReduceScatter allocating buffer of size " << padded_size/1024./1024.<< " MiB\n" << std::flush;
   auto fusion_buffer = GetScratchBuffer<void>(padded_size);
   void* fusion_data = fusion_buffer.get();
 
