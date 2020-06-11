@@ -24,15 +24,22 @@
 namespace onnxruntime {
 namespace cuda {
 
-template <typename T>
+template <typename T, int NumThreadsPerBlock, int NumElementsPerThread>
 __global__ void DropoutGradientKernel(
     const int64_t N,
     const T* dY_data,
     const bool* mask_data,
     const T scale,
     T* dX_data) {
-  CALCULATE_ELEMENTWISE_INDEX_OR_EXIT(id, N);
-  dX_data[id] = dY_data[id] * T(mask_data[id]) * scale;
+  CUDA_LONG id = NumElementsPerThread * NumThreadsPerBlock * blockIdx.x + threadIdx.x;
+#pragma unroll
+  for (int i = 0; i < NumElementsPerThread; i++) {
+    if (id < N) {
+      dX_data[id] = dY_data[id] * T(mask_data[id]) * scale;
+
+      id += NumThreadsPerBlock;
+    }
+  }
 }
 
 template <typename T>
@@ -48,8 +55,9 @@ void DropoutGradientKernelImpl(
     }
   } else {
     const float scale = 1.f / (1.f - ratio);
-    const int blocksPerGrid = (N + GridDim::maxThreadsPerBlock - 1) / GridDim::maxThreadsPerBlock;
-    DropoutGradientKernel<T><<<blocksPerGrid, GridDim::maxThreadsPerBlock, 0>>>(N, dY_data, mask_data, T(scale), dX_data);
+    const int blocksPerGrid = static_cast<int>(CeilDiv(N, GridDim::maxThreadsPerBlock * GridDim::maxElementsPerThread));
+    DropoutGradientKernel<T, GridDim::maxThreadsPerBlock, GridDim::maxElementsPerThread>
+                         <<<blocksPerGrid, GridDim::maxThreadsPerBlock, 0>>>(N, dY_data, mask_data, T(scale), dX_data);
   }
 }
 
